@@ -1,0 +1,9 @@
+// Purpose: Ignore files and directories that are not needed in the repository
+.cache/*
+.log/*
+
+.backup/
+.manos/
+.utils/
+.venv/
+.env/
