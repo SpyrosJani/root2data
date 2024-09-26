@@ -8,173 +8,62 @@ import awkward as ak #pip install akward-pandas
 from typing import List, Dict
 
 
-
-def get_tree_branches(root_file, columns_to_find) -> Dict[str, List[str]]: 
-    """
-    Extracts and returns the columns of interest from a ROOT file. It identifies the tree containing the branches(columns_to_find)
-    and returns a dictionary mapping tree names to the list of these columns.
-
-    Parameters:
-     - root_file (str): The file path to the ROOT file.
-     - cols_to_find (List[str]): A list of columns to extract from the ROOT file.
-
-    Returns:
-     - tree_dict: A dictionary where the keys are tree names and the values are lists of columns found in those trees.
-    """
-    tree_dict = {}
-    for tree_name in root_file.keys():
-        tree = root_file[tree_name]
-        if all(col in tree.keys() for col in columns_to_find): # check if all requested columns are in the tree
-            tree_list = [col for col in columns_to_find if col in tree.keys()] # get a list of the columns that are in the tree: phaseIITriggerTree
-            tree_dict[tree_name] = tree_list
-            print(f"Found columns: {tree_list} in tree: {tree_name}")
+# INCOMPLETE
+# def save_to_sqlite(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str) -> None:
+def save_to_sqlite(db_file_path, arrays: Dict[str, np.ndarray]):
+    conn = sqlite3.connect(db_file_path)
+    cursor = conn.cursor()
+    
+    for key, array in arrays.items():
+        # Create a table for each key
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS {key} (id INTEGER PRIMARY KEY, data BLOB)")
+        
+        if array.dtype == object:
+            try:
+                array = np.array([np.array(item, dtype=np.float64) for item in array])
+            except ValueError:
+                list_of_arrays = []
+                print('Cannot convert to float64. Converting to byte strings')
+                array_with_byte_data = np.array([str(item) for item in array], dtype='S')
+                for item in array_with_byte_data:
+                    if len(str(item)) > 1:
+                        string_data = item.decode('utf-8').replace('[', '').replace(']', '').replace('\n', '').strip()
+                        string_data = re.sub(r'\s+', ' ', string_data).split(' ')
+                        float_data = [float(x) for x in string_data]
+                        list_of_arrays.append(np.array(float_data, dtype=np.float64))
+                array = list_of_arrays
         else:
-            print(f"Columns not found in tree: {tree_name}")
-    return tree_dict
-
-
-def root_to_dict_of_arrays(root_files_path: str, columns_to_find: List[str]) -> Dict[str, np.ndarray]:
-    """
-    Extract data from a ROOT file and return it as a dictionary of NumPy arrays.
-
-    Parameters:
-     - root_files_path : str
-     - columns_to_find : List[str]
-
-     Returns:
-     - Dict[str, np.ndarray]
-    """
-    root_file = uproot.open(root_files_path)
-    tree_and_branches = get_tree_branches(root_file, columns_to_find)
-    dict_of_arrays = {}
-    list_of_arrays = [] # TODO: remove this
-    for tree_name, cols in tree_and_branches.items():
-        # root_file[tree_name].arrays(cols, library='np') # exp1
-        data = root_file[tree_name].arrays(cols) # exp2 returns <class 'awkward.highlevel.Array'>
-        list_of_arrays.append(data) # TODO remove this
-        dict_of_arrays.update(root_file[tree_name].arrays(cols, library="np")) # correct!
-        # return dict_of_arrays, list_of_arrays # TODO remove this
-    return dict_of_arrays
-
-    for tree_name, cols in tree_and_branches.items():
-        arrays = root_file[tree_name].arrays(cols, library="np")
-    # arrays = root_file[tree_name].arrays(columns_to_find, library="np") # tree name is fetched from the dictionary.keys()
-    return arrays
-
-
-def root_to_awkward_arrays(root_files_path: str, columns_to_find: List[str]) :
-    """
-    Extract data from a ROOT file and return it as a dictionary of NumPy arrays.
-
-    Parameters:
-     - root_files_path : str
-     - columns_to_find : List[str]
-
-     Returns:
-     - Dict[str, np.ndarray]
-    """
-    root_file = uproot.open(root_files_path)
-    tree_and_branches = get_tree_branches(root_file, columns_to_find)
-    for tree_name, cols in tree_and_branches.items():
-        # root_file[tree_name].arrays(cols, library='np') # exp1
-        awkward_data = root_file[tree_name].arrays(cols) # exp2 returns <class 'awkward.highlevel.Array'>
-        # return dict_of_arrays, list_of_arrays # TODO remove this
-    return awkward_data
-
-
-def save_to_sqlite(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str) -> None:
-    pass
-
-def save_to_h5(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str) -> None:
-
-##########################################################################################
-#      SCENARIO 1 : padding arrays with different lengths to the same length
-##########################################################################################
-    """
-    * Handling digitX: Since digitX contains arrays of different lengths, we pad each array to the length of the longest array using np.pad. This ensures that all arrays have the same length and can be stored in a 2D dataset in the HDF5 file.
-    * Padded Data: The padded arrays are stored in the HDF5 file, with np.nan used to fill the padding.
-
-    When storing data from a ROOT file into an HDF5 file, padding is necessary for columns like digitX and digitY that contain arrays of arrays (i.e., nested arrays) with varying lengths. Here's why padding is important:
-    Reasons for Padding:
-    1.Uniform Shape Requirement:
-    DF5 datasets require that all elements have the same shape. If digitX and digitY contain arrays of different lengths, they cannot be directly stored in a single HDF5 dataset without making their lengths uniform.
-    2.Data Integrity:
-    Padding ensures that the structure of the data is preserved when converting from ROOT to HDF5. Without padding, you might lose information about the original structure of the nested arrays.
-    3.Ease of Access:
-    By padding the arrays to the same length, you can easily access and manipulate the data in a consistent manner. This uniformity simplifies downstream data processing and analysis.
-
-    <!> Check for Nested Arrays: The code checks if the column's data type is object ('O'), which indicates nested arrays.
-    """
-    # with h5py.File(h5_file_path, 'w') as hdf5_file:
-    #         # Step 4: Store the fetched data
-    #         for key_, values_ in arrays.items():
-    #             if arrays[key_].dtype == 'O':
-    #                 # Handle the array of arrays case
-    #                 max_len = max(len(arr) for arr in values_)
-    #                 padded_data = np.array([np.pad(arr, (0, max_len - len(arr)), 'constant', constant_values=np.nan) for arr in values_])
-    #                 hdf5_file.create_dataset(key_, data=padded_data)
-    #             else:
-    #                 hdf5_file.create_dataset(key_, data=values_)
-
-##########################################################################################
-#      SCENARIO 2 : store each subarray as a separate dataset within the group
-##########################################################################################
-    # if arrays is an instance of ak.Array
-    # if isinstance(awkward_arrays, ak.Array): #isinstance(ak.type(awkward_arrays), ak.types.ListType)
-    #     with h5py.File(h5_file_path, 'w') as h5_file: 
-    #         # Example: awkward_arrays['digitX']
-    #         # ArrayType(ListType(NumpyType('float64')), 2108, None)
-    #         # <Array [[-15.2, -47.8, ..., 26.9, -54.9], ...] type='2108 * var * float64'>
-    #         for field in awkward_arrays.fields:
-    #             array_type = ak.type(awkward_arrays[field])
-    #             if isinstance(array_type, ak.types.ArrayType) and \
-    #             isinstance(array_type.content, ak.types.ListType) and \
-    #             isinstance(array_type.content.content, ak.types.NumpyType):  
-    #         #    ak.type(awkward_arrays[field]).type.type.dtype == 'float64' and \
-    #         #    ak.type(awkward_arrays[field]).parameters == 2108:
-    #             # if 
-    #             # group for each field
-    #                 group = h5_file.create_group(field)
-    #                 # each subarray as a separate dataset within the group
-    #                 for i, subarray in enumerate(awkward_arrays[field]):
-    #                     group.create_dataset(str(i), data=ak.to_numpy(subarray))
-    #             else:
-    #                 h5_file.create_dataset(field, data=ak.to_numpy(arrays[field]))
-    # return None
-
-##########################################################################################
-#      SCENARIO 3 - convert byte string data to list of arrays and store as variable-length sequence       
-##########################################################################################
-    with h5py.File(h5_file_path, 'w') as h5_file:
-        for key, array in arrays.items():
-            if array.dtype == object:
-                try:
-                    array = np.array([np.array(item, dtype=np.float64) for item in array])
-                except ValueError:
-                    list_of_arrays = []
-                    print('Can not convert to float64. Converting to byte strings')
-                    array_with_byte_data = np.array([str(item) for item in array], dtype='S')
-                    for item in array_with_byte_data:
-                        if len(str(item)) > 1:
-                            string_data = item.decode('utf-8').replace('[', '').replace(']', '').replace('\n', '').strip()
-                            string_data = re.sub(r'\s+', ' ', string_data).split(' ')
-                            float_data = [float(x) for x in string_data]
-                            list_of_arrays.append(np.array(float_data, dtype=np.float64)) 
-                    ##TODO: store the list of arrays as a variable-length sequence <!>
-                    dt = h5py.special_dtype(vlen=np.dtype('float64'))
-                    array = np.array(list_of_arrays, dtype=dt)
-            else:
-                array = array.astype(np.float64)
-            h5_file.create_dataset(key, data=array)
-    print(f'data has been successfully written to {h5_file_path}')
+            array = array.astype(array.dtype)
+        
+        # Insert data into the table
+        for idx, item in enumerate(array):
+            cursor.execute(f"INSERT INTO {key} (id, data) VALUES (?, ?)", (idx, item.tobytes()))
+    
+    conn.commit()
+    conn.close()
+    print(f'Data has been successfully written to {db_file_path}')
     return None
-                # Convert object dtype arrays to fixed-length strings
-                # max_length = max(len(str(item)) for item in array)
-                # str_dtype = h5py.string_dtype(encoding='utf-8', length=max_length)
-                # array = array.astype(str_dtype)
-            # h5_file.create_dataset(key, data=array)
 
 
+# INCOMPLETE
+def show_group_content(path: str) -> None:
+    structure = {} 
+    with h5py.File(path, 'r') as h5_file:
+        print(f"Contents of {path}:")
+        if isinstance(h5_file, h5py.Group):
+            structure[os.path.basename(path)] = list(h5_file.keys())
+            for key, item in h5_file.items():
+                if isinstance(item, h5py.Group):
+                    print(key, " ->  ", sep="", end="")
+                elif isinstance(item, h5py.Dataset):
+                    print(key, ": ", sep="")
+                    structure[os.path.basename(path)][key] = {'len':len(item), 'shape':item.shape, 'data':item[:]}
+                    # print("\t", item.name, ", with shape: ", item.shape, "and columns: ", item.dtype.names)
+        elif isinstance(h5_file, h5py.Dataset):
+            print("\t", h5_file.name, ", with shape: ", h5_file.shape, "and columns: ", h5_file.dtype.names)
+    return structure
+
+# INCOMPLETE
 def read_h5_file(h5_file_path: str) -> None:
     with h5py.File(h5_file_path, 'r') as h5_file:
         print(f"Contents of {h5_file_path}:")
@@ -190,7 +79,7 @@ def read_h5_file(h5_file_path: str) -> None:
                 print(f"\nDataset: {column}")
                 print(data)
 
-# OLD but worth exploring
+# INCOMPLETE
 def root_to_h5(root_files_path: str, cols_to_find: List[str], h5_file: str) -> np.ndarray:   
     """
     Convert a ROOT file to an HDF5 file.
@@ -246,7 +135,7 @@ def root_to_h5(root_files_path: str, cols_to_find: List[str], h5_file: str) -> n
     print(f"Conversion completed. HDF5 file created: {h5_files_path}")
 
 
-
+# INCOMPLETE
 def create_dataframe_from_hdf5_scenario_2(h5_file_path: str) -> None:
     df_rows = []
     with h5py.File(h5_file_path, 'r') as h5_file:
