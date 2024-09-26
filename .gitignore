@@ -1,4 +1,3 @@
-// Purpose: Ignore files and directories that are not needed in the repository
 .cache/*
 .log/*
 
@@ -7,3 +6,6 @@
 .utils/
 .venv/
 .env/
+.test/
+.vscode/
+data/
