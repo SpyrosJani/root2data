@@ -272,16 +272,28 @@ def get_tree_branches(root_file, columns_to_find) -> Dict[str, List[str]]:
 
     Returns:
      - tree_dict (Dict): A dictionary where the keys are tree names and the values are lists of columns found in those trees.
+    
+    Notes:
+    - A modification is used because the trees created in the PreAnalysis script are <ins>**larger**</ins> than the buffer size
+    and therefore ROOT creates multiple namecycles (i.e. there are two trees created, named "ProcessedEvents;8" and 
+    "ProcessedEvents;7"). We want to extract the branches from the more recent tree, i.e. the tree with the greater cycle number. 
+    The following set is used to store the basenames of the trees we have already processed.
     """
+    tree_basenames = set() 
     tree_dict = {}
     for tree_name in root_file.keys():
+        tree_name = tree_name.split(';')[0]
+        if tree_name in tree_basenames: 
+            continue
         tree = root_file[tree_name]
         if all(col in tree.keys() for col in columns_to_find): # check if all requested columns are in the tree
-            tree_list = [col for col in columns_to_find if col in tree.keys()] # get a list of the columns that are in the tree: phaseIITriggerTree
+            tree_list = [col for col in columns_to_find if col in tree.keys()] # get a list of the columns that are in the tree: eg. phaseIITriggerTree
             tree_dict[tree_name] = tree_list
             print(f"Found columns: {tree_list} in tree: {tree_name} for file: {os.path.basename(root_file.file_path)}")
         else:
             print(f"Columns not found in tree: {tree_name}")
+        #Add tree basename to the set, after we have extracted the branches
+        tree_basenames.add(tree_name)
     return tree_dict
 
 
@@ -436,21 +448,19 @@ def save_to_h5(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str)
                 except ValueError:
                     list_of_arrays = []
                     print(f'Can not convert {key} to float64. Converting to byte strings and storing as variable-length sequence')
-                    array_with_byte_data = np.array([str(item) for item in array], dtype='S')
+                    np.set_printoptions(threshold=np.inf) #NOTE: possible solution error for larger datasets
+                    array_with_byte_data = np.array([str(item.astype(float)) for item in array], dtype='S') #NOTE: item.astype(float) useful when item is boolean
                     for item in array_with_byte_data:
                         if len(str(item)) > 1:                            
-                            # string_data = item.decode('utf-8').strip('[]').replace('\n', '').strip()
-                            # string_data = re.sub(r'\s+', ' ', string_data).split(' ')
-                            # float_data = [float(x) for x in string_data]
-                            list_of_arrays.append(preprocessing(item)) 
-                            # list_of_arrays.append(np.array(float_data, dtype=np.float64)) 
+                            list_of_arrays.append(preprocessing(item)) #COMMENT: convert byte string data to list of arrays
                     dt = h5py.special_dtype(vlen=np.dtype('float64'))# store the list of arrays as a variable-length sequence <!>
                     array = np.array(list_of_arrays, dtype=dt)
             else:
-                # array = array.astype(np.float64) #BUG ? 
+                # array = array.astype(np.float64) 
                 array = array.astype(array.dtype) #COMMENT: convert array to its original dtype
             group.create_dataset(key, data=array)
-    print(f'data has been successfully written to {h5_file_path}')
+    print(f'Data has been successfully written to {h5_file_path}')
+    print(5*'-----------------------------------')
     return None
 
 
@@ -556,7 +566,7 @@ def create_dataframe_and_show_structure(h5_file_path: str) -> pd.DataFrame:
                 total_data[dataset] = data
             # Print the data
             # print(f"Data in the '{key}' dataset:", data)
-    print(f'\ndata for {h5_file_path}:')
+    print(f'\nData for {h5_file_path}:')
 
 
     return pd.DataFrame(total_data)
