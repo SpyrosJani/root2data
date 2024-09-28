@@ -267,7 +267,7 @@ def root2h5(root_files: List[str], h5_dir:str) -> None:
         >>> convert_new_root_files(root_files, h5_dir)
     """
     for file in root_files:
-        columns_to_find = ["eventNumber", "digitX", "digitY", "digitZ"] #IMPORTANT: columns to extract from the ROOT file should be dynamic
+        columns_to_find = ['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT', 'trueNeutrinoEnergy', 'trueMuonEnergy']#IMPORTANT: columns to extract from the ROOT file should be dynamic
         h5_file_path = os.path.join(h5_dir, os.path.basename(file).replace('.root', '.h5'))
         array_data_dict = root_to_dict_of_arrays(file, columns_to_find)
         awkward_array = root_to_awkward_arrays(file, columns_to_find) #NOTE: awkward array is not used 
@@ -627,7 +627,7 @@ def main():
     root_dir = os.getcwd() + "/data/root"  # Directory containing ROOT files
     h5_dir = os.getcwd() + "/data/h5"  # Directory to save HDF5 files
     # sqlite_dir = f"{os.getcwd()}/data/sqlite/"
-    columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT']
+    columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT', 'trueNeutrinoEnergy', 'trueMuonEnergy']
 
     if not os.path.exists(h5_dir):
         os.makedirs(h5_dir)
@@ -721,5 +721,8 @@ if __name__ == "__main__":
 
     try:
         main()
+        # root_files_path = '/home/nikosili/projects/annie_gnn/data/root/after_phase_0.0.root'
+        # root_file = uproot.open(root_files_path)
+        # get_tree_branches(root_file,['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT', 'trueNeutrinoEnergy', 'trueMuonEnergy'])
     except Exception as error_main:
         print('[main error]: ',error_main)
