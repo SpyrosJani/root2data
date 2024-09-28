@@ -46,7 +46,6 @@ def save_to_sqlite(db_file_path, arrays: Dict[str, np.ndarray]):
     print(f'Data has been successfully written to {db_file_path}')
     return None
 
-
 # INCOMPLETE
 def show_group_content(path: str) -> None:
     structure = {} 
@@ -233,6 +232,20 @@ def scan_for_new_root_files(root_dir: str, h5_dir:str=None, sqlite_dir:str=None)
     return new_root_files_h5, new_root_files_sqlite
 
 
+def list_h5_files(h5_dir: str) -> List[str]:
+    """
+    Lists all HDF5 files in the given directory.
+
+    Parameters:
+     - h5_dir (str): Directory to search for HDF5 files.
+
+    Returns:
+     - List[str]: List of HDF5 file paths.
+    """
+    h5_files = [f for f in os.listdir(h5_dir) if f.endswith('.h5')]
+    return h5_files
+
+
 def root2h5(root_files: List[str], h5_dir:str) -> None:
     """
     Converts a list of root files to HDF5 format and saves them in the specified directory.
@@ -254,9 +267,10 @@ def root2h5(root_files: List[str], h5_dir:str) -> None:
         >>> convert_new_root_files(root_files, h5_dir)
     """
     for file in root_files:
+        columns_to_find = ["eventNumber", "digitX", "digitY", "digitZ"] #IMPORTANT: columns to extract from the ROOT file should be dynamic
         h5_file_path = os.path.join(h5_dir, os.path.basename(file).replace('.root', '.h5'))
         array_data_dict = root_to_dict_of_arrays(file, columns_to_find)
-        awkward_array = root_to_awkward_arrays(file, columns_to_find) #IMPORTANT: awkward array is not used 
+        awkward_array = root_to_awkward_arrays(file, columns_to_find) #NOTE: awkward array is not used 
         save_to_h5(array_data_dict, awkward_array, h5_file_path) 
     return None
 
@@ -531,7 +545,7 @@ def create_dataframe_and_show_structure(h5_file_path: str) -> pd.DataFrame:
     Returns:
         - pd.DataFrame: A DataFrame containing the data from the HDF5 file.
     """
-
+    print(5*'-----------------------------------')
     total_data = {}
 
     # Open the H5 file
@@ -544,8 +558,7 @@ def create_dataframe_and_show_structure(h5_file_path: str) -> pd.DataFrame:
                 for subkey in h5_file[key].keys():
                     item = h5_file[key][subkey]
                     if isinstance(item, h5py.Dataset):
-                        print(f"  |->Dataset: {subkey} of type: {item.dtype}, has length: {len(item[:])} | type: {type(item[:])} | dtype: {item.dtype}")
-                        
+                        print(f"  |-> Dataset: {subkey} of type: {item.dtype}, has length: {len(item[:])} | type: {type(item[:])} | dtype: {item.dtype}")
                     else:
                         print(f"  Subkey: {subkey} is a group")
                         for subsubkey in item.keys():
@@ -609,6 +622,60 @@ def traverse_hdf5(h5_file_path: str) -> Dict:
 
     return info
 
+
+def main():
+    root_dir = os.getcwd() + "/data/root"  # Directory containing ROOT files
+    h5_dir = os.getcwd() + "/data/h5"  # Directory to save HDF5 files
+    # sqlite_dir = f"{os.getcwd()}/data/sqlite/"
+    columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT']
+
+    if not os.path.exists(h5_dir):
+        os.makedirs(h5_dir)
+
+    while True:
+        print("Please choose an option:")
+        print("1. Read an HDF5 file")
+        print("2. Convert ROOT files to HDF5 and save them")
+        print("3. Exit")
+        choice = input("Enter your choice (1/2/3): ")
+
+        if choice == '1':
+            # List all available HDF5 files
+            h5_files = list_h5_files(h5_dir)
+
+            if not h5_files:
+                print(f"No HDF5 files found in {h5_dir}.")
+            else:
+                print("Available HDF5 files:")
+                for idx, h5_file in enumerate(h5_files):
+                    print(f"{idx + 1}. {h5_file}")
+
+                file_choice = int(input(f"Select a file to read (1-{len(h5_files)}): "))
+                selected_h5_file = os.path.join(h5_dir, h5_files[file_choice - 1])
+
+                # read_h5_file(selected_h5_file)
+                df = create_dataframe_and_show_structure(selected_h5_file)
+                print(df)
+                print(5*'-----------------------------------')
+        
+        elif choice == '2':
+            print(f"Scanning {root_dir} for new ROOT files to convert...")
+            new_root_files_h5, new_root_files_sqlite = scan_for_new_root_files(root_dir, h5_dir, sqlite_dir=None)
+
+            if not new_root_files_h5:
+                print("No new ROOT files found for conversion.")
+            else:
+                print(f"Converting {len(new_root_files_h5)} ROOT files to HDF5 format...")
+                root2h5(new_root_files_h5, h5_dir)
+                print(f"Conversion completed. HDF5 files saved to {h5_dir}")
+
+        elif choice == '3':
+            print("Exiting...")
+            break
+
+        else:
+            print("Invalid option, please choose again.")
+
 if __name__ == "__main__":
     #TODO: these columns could be added as arguments when executing transform.py from the command line => python3 transform.py --columns eventNumber,digitX, digitY, digitZ, digitT
     # parser = argparse.ArgumentParser(description="Process ROOT files and save data to HDF5 and SQLite format.")
@@ -623,31 +690,36 @@ if __name__ == "__main__":
     # h5_dir = args.h5_dir
     # sqlite_dir = args.sqlite_dir
 
+    # try:
+    # # STEP 1: convert ROOT to H5
+    #     root_dir = f"{os.getcwd()}/data/root/"
+    #     h5_dir = f"{os.getcwd()}/data/h5/"
+    #     sqlite_dir = f"{os.getcwd()}/data/sqlite/"
+
+    #     columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT']
+
+    #     files_path = scan_for_new_root_files(root_dir, h5_dir, sqlite_dir)
+    #     # dhf5 conversion
+    #     try:
+    #         root2h5(files_path[0], h5_dir) #files_path[0] for h5
+    #     except Exception as error_hdf5:
+    #         print('[hdf5 error]: ',error_hdf5)
+
+    # # STEP 2: create a dataframe from H5 file  
+    #     h5_output_files = os.listdir(h5_dir)
+    #     for h5_file in h5_output_files:
+    #         if h5_file.endswith('.h5'):
+    #             # file_contents = traverse_hdf5(h5_dir+h5_file)
+    #             # print(file_contents)
+
+    #             data = create_dataframe_and_show_structure(f"{h5_dir}/{h5_file}")
+    #             print(pd.DataFrame(data))
+    #             print(5*'-----------------------------------')
+
+    # except Exception as error_main:
+    #     print('[main error]: ',error_main)
+
     try:
-    # STEP 1: convert ROOT to H5
-        root_dir = f"{os.getcwd()}/data/root/"
-        h5_dir = f"{os.getcwd()}/data/h5/"
-        sqlite_dir = f"{os.getcwd()}/data/sqlite/"
-
-        columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT']
-
-        files_path = scan_for_new_root_files(root_dir, h5_dir, sqlite_dir)
-        # dhf5 conversion
-        try:
-            root2h5(files_path[0], h5_dir) #files_path[0] for h5
-        except Exception as error_hdf5:
-            print('[hdf5 error]: ',error_hdf5)
-
-    # STEP 2: create a dataframe from H5 file  
-        h5_output_files = os.listdir(h5_dir)
-        for h5_file in h5_output_files:
-            if h5_file.endswith('.h5'):
-                # file_contents = traverse_hdf5(h5_dir+h5_file)
-                # print(file_contents)
-
-                data = create_dataframe_and_show_structure(f"{h5_dir}/{h5_file}")
-                print(pd.DataFrame(data))
-                print(5*'-----------------------------------')
-
+        main()
     except Exception as error_main:
         print('[main error]: ',error_main)
