@@ -88,61 +88,6 @@ def save_to_sqlite(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: 
 def save_to_h5(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str) -> None:
 
 ##########################################################################################
-#      SCENARIO 1 : padding arrays with different lengths to the same length
-##########################################################################################
-    """
-    * Handling digitX: Since digitX contains arrays of different lengths, we pad each array to the length of the longest array using np.pad. This ensures that all arrays have the same length and can be stored in a 2D dataset in the HDF5 file.
-    * Padded Data: The padded arrays are stored in the HDF5 file, with np.nan used to fill the padding.
-
-    When storing data from a ROOT file into an HDF5 file, padding is necessary for columns like digitX and digitY that contain arrays of arrays (i.e., nested arrays) with varying lengths. Here's why padding is important:
-    Reasons for Padding:
-    1.Uniform Shape Requirement:
-    DF5 datasets require that all elements have the same shape. If digitX and digitY contain arrays of different lengths, they cannot be directly stored in a single HDF5 dataset without making their lengths uniform.
-    2.Data Integrity:
-    Padding ensures that the structure of the data is preserved when converting from ROOT to HDF5. Without padding, you might lose information about the original structure of the nested arrays.
-    3.Ease of Access:
-    By padding the arrays to the same length, you can easily access and manipulate the data in a consistent manner. This uniformity simplifies downstream data processing and analysis.
-
-    <!> Check for Nested Arrays: The code checks if the column's data type is object ('O'), which indicates nested arrays.
-    """
-    # with h5py.File(h5_file_path, 'w') as hdf5_file:
-    #         # Step 4: Store the fetched data
-    #         for key_, values_ in arrays.items():
-    #             if arrays[key_].dtype == 'O':
-    #                 # Handle the array of arrays case
-    #                 max_len = max(len(arr) for arr in values_)
-    #                 padded_data = np.array([np.pad(arr, (0, max_len - len(arr)), 'constant', constant_values=np.nan) for arr in values_])
-    #                 hdf5_file.create_dataset(key_, data=padded_data)
-    #             else:
-    #                 hdf5_file.create_dataset(key_, data=values_)
-
-##########################################################################################
-#      SCENARIO 2 : store each subarray as a separate dataset within the group
-##########################################################################################
-    # if arrays is an instance of ak.Array
-    # if isinstance(awkward_arrays, ak.Array): #isinstance(ak.type(awkward_arrays), ak.types.ListType)
-    #     with h5py.File(h5_file_path, 'w') as h5_file: 
-    #         # Example: awkward_arrays['digitX']
-    #         # ArrayType(ListType(NumpyType('float64')), 2108, None)
-    #         # <Array [[-15.2, -47.8, ..., 26.9, -54.9], ...] type='2108 * var * float64'>
-    #         for field in awkward_arrays.fields:
-    #             array_type = ak.type(awkward_arrays[field])
-    #             if isinstance(array_type, ak.types.ArrayType) and \
-    #             isinstance(array_type.content, ak.types.ListType) and \
-    #             isinstance(array_type.content.content, ak.types.NumpyType):  
-    #         #    ak.type(awkward_arrays[field]).type.type.dtype == 'float64' and \
-    #         #    ak.type(awkward_arrays[field]).parameters == 2108:
-    #             # if 
-    #             # group for each field
-    #                 group = h5_file.create_group(field)
-    #                 # each subarray as a separate dataset within the group
-    #                 for i, subarray in enumerate(awkward_arrays[field]):
-    #                     group.create_dataset(str(i), data=ak.to_numpy(subarray))
-    #             else:
-    #                 h5_file.create_dataset(field, data=ak.to_numpy(arrays[field]))
-    # return None
-
-##########################################################################################
 #      SCENARIO 3 - convert byte string data to list of arrays and store as variable-length sequence       
 ##########################################################################################
     with h5py.File(h5_file_path, 'w') as h5_file:
@@ -168,11 +113,6 @@ def save_to_h5(arrays: Dict[str, np.ndarray], awkward_arrays, h5_file_path: str)
             h5_file.create_dataset(key, data=array)
     print(f'data has been successfully written to {h5_file_path}')
     return None
-                # Convert object dtype arrays to fixed-length strings
-                # max_length = max(len(str(item)) for item in array)
-                # str_dtype = h5py.string_dtype(encoding='utf-8', length=max_length)
-                # array = array.astype(str_dtype)
-            # h5_file.create_dataset(key, data=array)
 
 
 def read_h5_file(h5_file_path: str) -> None:
@@ -204,16 +144,6 @@ def root_to_h5(root_files_path: str, cols_to_find: List[str], h5_file: str) -> n
     """
     # Open the ROOT file
     root_file = uproot.open(root_files_path)
-    # tree_dict = get_tree_branches(root_file, columns_to_find) # get a dictionary with the tree and columns(branches) to extract
-    # for tree_name, cols in tree_dict.items():
-    #     arrays = root_file[tree_name].arrays(cols, library="np")
-    # return arrays
-
-    # for tree_name in tree_dict.keys():
-    #     root_file[tree_name].arrays(library="np")['eventNumber'] # method 1
-    #     root_file[tree_name].arrays(columns_to_find)['eventNumber']# method 2
-        # print(f"\nProcessing tree: {tree_name}")
-
 
     for tree_name in root_file.keys():
         print(f"Processing tree: {tree_name}")
@@ -247,30 +177,30 @@ def root_to_h5(root_files_path: str, cols_to_find: List[str], h5_file: str) -> n
 
 
 
-def create_dataframe_from_hdf5_scenario_2(h5_file_path: str) -> None:
-    df_rows = []
-    with h5py.File(h5_file_path, 'r') as h5_file:
-        print(f"Creating a dataframe for: {h5_file_path}")
-        for column in h5_file.keys():
-            if isinstance(h5_file[column], h5py.Group):
-                print(f"Column: {column} is a group and contains {len(h5_file[column])} datasets:") 
-                for subkey in h5_file[column].keys():
-                    data = h5_file[column][subkey][:]
-                    # row = {h5_file[column][subkey][:]}
-                    # print(f"Dataset_subkey: {subkey}")
-                    row = {f'{column}': data} ##BUG : IS ORDERING NOT PRESERVED ?
-                    df_rows.append(row)
-                    # print(data)
+# def create_dataframe_from_hdf5_scenario_2(h5_file_path: str) -> None:
+#     df_rows = []
+#     with h5py.File(h5_file_path, 'r') as h5_file:
+#         print(f"Creating a dataframe for: {h5_file_path}")
+#         for column in h5_file.keys():
+#             if isinstance(h5_file[column], h5py.Group):
+#                 print(f"Column: {column} is a group and contains {len(h5_file[column])} datasets:") 
+#                 for subkey in h5_file[column].keys():
+#                     data = h5_file[column][subkey][:]
+#                     # row = {h5_file[column][subkey][:]}
+#                     # print(f"Dataset_subkey: {subkey}")
+#                     row = {f'{column}': data} ##BUG : IS ORDERING NOT PRESERVED ?
+#                     df_rows.append(row)
+#                     # print(data)
 
 
-            else:
-                print(f"Column: {column} is NOT a group and contains {len(h5_file[column])} datasets:")
-                data = h5_file[column][:]
-                print(f"Dataset: {column}")
-                # print(data)
-                df_rows.append(data)
+#             else:
+#                 print(f"Column: {column} is NOT a group and contains {len(h5_file[column])} datasets:")
+#                 data = h5_file[column][:]
+#                 print(f"Dataset: {column}")
+#                 # print(data)
+#                 df_rows.append(data)
 
-    return df_rows
+#     return df_rows
 
 
 def create_dataframe_from_hdf5_scenario_3(h5_file_path: str) -> pd.DataFrame:
@@ -330,66 +260,6 @@ def scan_for_new_root_files(root_dir: str, h5_dir:str=None, sqlite_dir:str=None)
     return new_root_files_h5, new_root_files_sqlite
 
 
-
-# def scan_for_not_converted_files(root_dir: str, h5_dir:str=None, sqlite_dir:str=None) -> List[str]:
-#     """
-#     Scans the root directory for new files that have not been converted to h5 or sqlite files
-#     depending on the folder specified.
-
-#     Parameters:
-#      - root_dir (str): The directory containing the ROOT files.
-#      - h5_dir (str): The directory containing the HDF5 files.
-#      - sqlite_dir (str): The directory containing the SQLite files.
-    
-#     Returns:
-#      - new_root_files (list): A list of file paths to the new ROOT files.
-    
-#     """
-#     root_files = os.listdir(root_dir)
-#     dir_to_check = input('check for h5 or sqlite files: ')
-#     if dir_to_check == 'h5':
-#         files = [x.split('.h5')[0] for x in os.listdir(h5_dir)]
-#     elif dir_to_check == 'sqlite':
-#         files = [x.split('.sqlite3')[0] for x in os.listdir(sqlite_dir)]
-#     else:
-#         print('Invalid directory name')
-#         return None
-#     # check for files in root folder that are not in h5 and sqlite folders 
-#     new_root = [x for x in root_files if x.endswith('.root') and x.split('.root')[0] not in files]
-    
-#     print(f'New root files: {new_root}')
-#     print(f'Searched in {dir_to_check} folder')
-#     new_root_files = [os.path.join(os.getcwd(), 'root', x) for x in new_root]
-    
-#     return new_root_files
-
-
-# same with the next but with no DOC
-# def convert_new_root_files(root_files: List[str], h5_dir:str) -> None:
-#     """
-    
-#     """
-#     # if not root_files:
-#     #     print("No new root files found")
-#     #     return
-#     # else:
-#     for file in root_files:
-#         h5_file_path = os.path.join(h5_dir, os.path.basename(file).replace('.root', '.h5'))
-#         array_data_dict = root_to_arrays(file, columns_to_find)
-#         save_to_h5(array_data_dict, h5_file_path)     
-            
-#             #  os.path.basename(file).replace('.root', '.h5')
-#             # root_to_h5(file, cols_to_find, h5_file_path)
-
-#             # with h5py.File(h5_file_path, 'w') as f:
-#                 # h5_file = h5_file_name
-#                 # root_to_h5(file, f) 
-
-#             # print(f"New empty HDF5 file created: {h5_file_path}")
-#             ## TODO : convert root to h5 <!>            
-#     return None
-
-
 def convert_new_root_files(root_files: List[str], h5_dir:str) -> None:
     """
     Converts a list of root files to HDF5 format and saves them in the specified directory.
@@ -411,6 +281,7 @@ def convert_new_root_files(root_files: List[str], h5_dir:str) -> None:
         >>> convert_new_root_files(root_files, h5_dir)
     """
     for file in root_files:
+        columns_to_find = ["eventNumber", "digitX", "digitY", "digitZ"]
         h5_file_path = os.path.join(h5_dir, os.path.basename(file).replace('.root', '.h5'))
         array_data_dict = root_to_dict_of_arrays(file, columns_to_find)
         awkward_array = root_to_awkward_arrays(file, columns_to_find)
@@ -420,31 +291,71 @@ def convert_new_root_files(root_files: List[str], h5_dir:str) -> None:
     return None
 
 
+def list_h5_files(h5_dir: str) -> List[str]:
+    """
+    Lists all HDF5 files in the given directory.
+
+    Parameters:
+     - h5_dir (str): Directory to search for HDF5 files.
+
+    Returns:
+     - List[str]: List of HDF5 file paths.
+    """
+    h5_files = [f for f in os.listdir(h5_dir) if f.endswith('.h5')]
+    return h5_files
+
+
+def main():
+    root_dir = os.getcwd() + "/data/root"  # Directory containing ROOT files
+    output_dir = os.getcwd() + "/data/h5"  # Directory to save HDF5 files
+
+    # Create the output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    while True:
+        print("Please choose an option:")
+        print("1. Read an HDF5 file")
+        print("2. Convert ROOT files to HDF5 and save them")
+        print("3. Exit")
+        choice = input("Enter your choice (1/2/3): ")
+
+        if choice == '1':
+            # List all available HDF5 files
+            h5_files = list_h5_files(output_dir)
+
+            if not h5_files:
+                print(f"No HDF5 files found in {output_dir}.")
+            else:
+                print("Available HDF5 files:")
+                for idx, file in enumerate(h5_files):
+                    print(f"{idx + 1}. {file}")
+
+                file_choice = int(input(f"Select a file to read (1-{len(h5_files)}): "))
+                selected_h5_file = os.path.join(output_dir, h5_files[file_choice - 1])
+
+                read_h5_file(selected_h5_file)
+                df = create_dataframe_from_hdf5_scenario_3(selected_h5_file)
+                print(df)
+
+        elif choice == '2':
+            print(f"Scanning {root_dir} for new ROOT files to convert...")
+            new_root_files_h5, new_root_files_sqlite = scan_for_new_root_files(root_dir, output_dir, sqlite_dir=None)
+
+            if not new_root_files_h5:
+                print("No new ROOT files found for conversion.")
+            else:
+                print(f"Converting {len(new_root_files_h5)} ROOT files to HDF5 format...")
+                convert_new_root_files(new_root_files_h5, output_dir)
+                print(f"Conversion completed. HDF5 files saved to {output_dir}")
+
+        elif choice == '3':
+            print("Exiting...")
+            break
+
+        else:
+            print("Invalid option, please choose again.")
+
 if __name__ == "__main__":
-    try:
-    # STEP 1: convert ROOT to H5
-    # initialize variables
-        root_dir = f"{os.getcwd()}/data/root/"
-        h5_dir = f"{os.getcwd()}/data/h5/"
-        sqlite_dir = f"{os.getcwd()}/data/sqlite/"
+    main()
 
-        columns_to_find =['eventNumber', 'digitX', 'digitY', 'digitZ', 'digitT']
-
-        files_path = scan_for_new_root_files(root_dir, h5_dir, sqlite_dir)
-        # dhf5 conversion
-        try:
-            convert_new_root_files(files_path[0], h5_dir)
-        except Exception as error_hdf5:
-            print(error_hdf5)
-        # sqlite conversion
-        # try:
-        #     convert_new_root_files(files_path[1], sqlite_dir)
-        # except Exception as error_sqlite:
-        #     print(error_sqlite)
-
-    # STEP 2: create a dataframe from read H5 file  
-        data = create_dataframe_from_hdf5_scenario_3('/home/nikosili/projects/annie_gnn/data/h5/after_phase_0.9.h5')
-        print(pd.DataFrame(data))
-
-    except Exception as error_main:
-        print(error_main)
