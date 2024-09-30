@@ -35,7 +35,20 @@ pip install -r requirements.txt
 - list_h5_files : Display all h5 files so that the user can pick one to view.
 
 ### Example
+![demo (copy)](https://github.com/user-attachments/assets/f144e39c-c35d-4bd3-8230-b0b4272e26fb)
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## License
-
 This project is licensed under the Apache License. See the LICENSE file for details.
+
